@@ -67,7 +67,7 @@ int main() {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 30;
+  t.tv_sec = 3000;
   t.tv_usec = 0;
 
   // our receive buffer

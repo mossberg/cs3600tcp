@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 30;
+  t.tv_sec = 60;
   t.tv_usec = 0;
 
   while (send_next_packet(sock, out)) {
@@ -162,6 +162,7 @@ int main(int argc, char *argv[]) {
         }
       } else {
         mylog("[error] timeout occurred\n");
+		break;
       }
     }
   }
