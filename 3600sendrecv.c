@@ -53,15 +53,21 @@ void mylog(char *fmt, ...) {
   va_end(args);
 }
 
+//TODO: Implements CRC16/TCP Checksum, returns 1 if the checksum is valid, 0 otherwise
+int valid_checksum(unsigned char * data) {
+
+	return 1;
+}
+
 /**
  * This function takes in a bunch of header fields and 
  * returns a brand new header.  The caller is responsible for
  * eventually free-ing the header.
  */
-header *make_header(int sequence, int length, int eof, int ack) {
+header *make_header(int sequence, int length, int fin, int ack) {
   header *myheader = (header *) malloc(sizeof(header));
   myheader->magic = MAGIC;
-  myheader->eof = eof;
+  myheader->fin = fin;
   myheader->sequence = htonl(sequence);
   myheader->length = htons(length);
   myheader->ack = ack;

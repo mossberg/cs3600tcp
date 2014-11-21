@@ -71,8 +71,18 @@ int main() {
   t.tv_usec = 0;
 
   // our receive buffer
-  int buf_len = 1500;
-  void* buf = malloc(buf_len);
+	int buf_len = 1500;
+	void* buf = malloc(buf_len);
+
+	packet * window[WINDOW_SIZE];
+
+	unsigned int counter = 0;
+	unsigned int ack = 0;
+	
+	while(0) {
+		//TCP Handshake
+		//Initialize 
+	}
 
   // wait to receive, or for a timeout
   while (1) {
@@ -83,34 +93,74 @@ int main() {
       int received;
       if ((received = recvfrom(sock, buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
         perror("recvfrom");
-        exit(1);
+		free(buf);
+		//Cleanup Window
+	    exit(1);
       }
 
-//      dump_packet(buf, received);
+		
 
-      header *myheader = get_header(buf);
-      char *data = get_data(buf);
-  
-      if (myheader->magic == MAGIC) {
-        write(1, data, myheader->length);
 
-        mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
-        mylog("[send ack] %d\n", myheader->sequence + myheader->length);
+		header *myheader = get_header(buf);
+		char *data = get_data(buf);
+		
+		if(myheader->sequence > ack + WINDOW_SIZE) {
+			mylog("[received packet outside of window]");
+			continue;
+		} else if(!valid_checksum(buf)) {
+			mylog("[data corrupted]");
+			continue;
+		} else if(myheader->magic != MAGIC) {
+			mylog("[unrecognized packet]");
+			continue;
+		}
+		
+		//Got the sequence value that we were expecting
+		if(myheader->sequence == ack) {
+			write(1, data, myheader->length);
+			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
+			ack += myheader->length;
+			int fin = myheader->fin;
+			while(window[counter + 1 % WINDOW_SIZE]) {
+				ack += window[counter + 1 %WINDOW_SIZE]->hdr.length;
+				fin = window[counter + 1 % WINDOW_SIZE]->hdr.fin;
+				write(1, window[counter + 1 % WINDOW_SIZE], window[counter + 1 % WINDOW_SIZE]->hdr.length),
+				free(window[counter + 1 % WINDOW_SIZE]); 
+				window[counter + 1 % WINDOW_SIZE] = NULL;
+				counter++;
+			}
+			mylog("[send ack] %d\n",ack);
+			header *responseheader = make_header(ack, 0, fin, 1);
+			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
+			  perror("sendto");
+				//free_window(window);
+			  exit(1);
+			}
+			if (myheader->fin) {
+			  mylog("[recv fin]\n");
+			  mylog("[completed]\n");
+			  exit(0);
+			}
+		//TODO: bug if sequence, ack both near 2^32, sequence could be out of order and roll-over and be caught by this case
+		//Received duplicate packet
+		} else if(myheader->sequence < ack) {
+			//Send ack for what we have already accepted
+			header *responseheader = make_header(ack, 0, myheader->fin, 1);
+			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
+			  perror("sendto");
+				//free_window(window);
+			  exit(1);
+			}
+		//Received a packet above the expected packet, but within window size
+		} else {
+			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (out-of-order)");
 
-        header *responseheader = make_header(myheader->sequence + myheader->length, 0, myheader->eof, 1);
-        if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
-          perror("sendto");
-          exit(1);
-        }
+			packet * pkt = malloc(1480);
+			pkt->hdr = *myheader;
+			memcpy(pkt->data, data, DATA_SIZE);
+			window[counter % WINDOW_SIZE] = pkt;		
+		}
 
-        if (myheader->eof) {
-          mylog("[recv eof]\n");
-          mylog("[completed]\n");
-          exit(0);
-        }
-      } else {
-        mylog("[recv corrupted packet]\n");
-      }
     } else {
       mylog("[error] timeout occurred\n");
       exit(1);
