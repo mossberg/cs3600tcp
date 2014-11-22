@@ -74,7 +74,7 @@ int main() {
 	int buf_len = 1500;
 	void* buf = malloc(buf_len);
 
-	packet * window[WINDOW_SIZE];
+	packet * window[WINDOW_SIZE] = {0};
 
 	unsigned int counter = 0;
 	unsigned int ack = 0;
@@ -121,7 +121,7 @@ int main() {
 			mylog("\n[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
-			while(window[counter + 1 % WINDOW_SIZE]) {
+			while(window[counter + 1 % WINDOW_SIZE] != NULL) {
 				ack += window[counter + 1 %WINDOW_SIZE]->hdr.length;
 				fin = window[counter + 1 % WINDOW_SIZE]->hdr.fin;
 				write(1, window[counter + 1 % WINDOW_SIZE]->data, window[counter + 1 % WINDOW_SIZE]->hdr.length),
@@ -147,7 +147,7 @@ int main() {
 			mylog("[recv dup] %d\n", myheader->sequence);
 			//Send ack for what we have already accepted
 			header *responseheader = make_header(ack, 0, myheader->fin, 1);
-			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
+			if (sendto(sock, responseheader, sizeof(struct header_t), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
 				//free_window(window);
 			  exit(1);

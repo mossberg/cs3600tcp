@@ -78,6 +78,15 @@ int send_next_packet(int sock, struct sockaddr_in out, unsigned int index) {
 	packet *next_packet = get_next_packet(&packet_len, index);
 
 	if (next_packet == NULL) {
+	  /*
+		header *myheader = make_header(sequence, 0, 1, 0);
+	  mylog("[send eof]\n");
+
+	  if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
+		perror("sendto");
+		exit(1);
+	  }
+	*/
 		return 0;
 	}
 	mylog("[send data] %d (%d)\n", ntohl(next_packet->hdr.sequence), packet_len - sizeof(header));
@@ -156,13 +165,15 @@ int main(int argc, char *argv[]) {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 30;
+  t.tv_sec = 5;
   t.tv_usec = 0;
 
   while (send_next_window(sock, out)) {
     int done = 0;
 
 	int dup_counter = 0;
+
+	t.tv_sec += 5;
 
     while (! done) {
       FD_ZERO(&socks);
@@ -204,8 +215,9 @@ int main(int argc, char *argv[]) {
 
 				ack_counter++;
 			}
-
-			done = 1;
+			if(sequence == acknum) {
+				done = 1;
+			}			
         } else if(ntohl(myheader->acknum) == acknum) {
 			mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
@@ -221,7 +233,7 @@ int main(int argc, char *argv[]) {
       } else {
         mylog("[error] timeout occurred\n");
 	//	send_next_packet(sock, out, ack_counter);
-		t.tv_sec = 30;
+		t.tv_sec += 5;
 		done = 1;
       }
     }

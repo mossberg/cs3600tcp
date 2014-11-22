@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#define WINDOW_SIZE 2000
+#define WINDOW_SIZE 100
 #define DATA_SIZE 1460
 
 typedef struct header_t {
