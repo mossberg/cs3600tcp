@@ -121,12 +121,13 @@ int main() {
 			mylog("\n[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
-			while(window[counter + 1 % WINDOW_SIZE] != NULL) {
-				ack += window[counter + 1 %WINDOW_SIZE]->hdr.length;
-				fin = window[counter + 1 % WINDOW_SIZE]->hdr.fin;
-				write(1, window[counter + 1 % WINDOW_SIZE]->data, window[counter + 1 % WINDOW_SIZE]->hdr.length),
-				free(window[counter + 1 % WINDOW_SIZE]); 
-				window[counter + 1 % WINDOW_SIZE] = NULL;
+			counter++;
+			while(window[counter % WINDOW_SIZE] != NULL) {
+				ack += window[counter %WINDOW_SIZE]->hdr.length;
+				fin = window[counter % WINDOW_SIZE]->hdr.fin;
+				write(1, window[counter % WINDOW_SIZE]->data, window[counter % WINDOW_SIZE]->hdr.length),
+				free(window[counter % WINDOW_SIZE]); 
+				window[counter % WINDOW_SIZE] = NULL;
 				counter++;
 			}
 			mylog("\n[send ack] %d\n",ack);
@@ -136,7 +137,7 @@ int main() {
 				//free_window(window);
 			  exit(1);
 			}
-			if (myheader->fin) {
+			if (fin) {
 			  mylog("[recv fin]\n");
 			  mylog("[completed]\n");
 			  exit(0);
@@ -166,6 +167,9 @@ int main() {
 			pkt->hdr = *myheader;
 			memcpy(pkt->data, data, DATA_SIZE);
 			unsigned int index = counter + (myheader->sequence - ack)/DATA_SIZE;
+			if(myheader->sequence - ack < DATA_SIZE) {
+				index++;
+			}
 			window[index % WINDOW_SIZE] = pkt;		
 		}
 
