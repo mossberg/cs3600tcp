@@ -104,32 +104,32 @@ int main() {
 		header *myheader = get_header(buf);
 		char *data = get_data(buf);
 		
-		if(myheader->sequence > ack + WINDOW_SIZE) {
-			mylog("[received packet outside of window]");
+		if(myheader->sequence > ack + DATA_SIZE * WINDOW_SIZE) {
+			mylog("[received packet outside of window]\n");
 			continue;
 		} else if(!valid_checksum(buf)) {
-			mylog("[data corrupted]");
+			mylog("[data corrupted]\n");
 			continue;
 		} else if(myheader->magic != MAGIC) {
-			mylog("[unrecognized packet]");
+			mylog("[unrecognized packet]\n");
 			continue;
 		}
 		
 		//Got the sequence value that we were expecting
 		if(myheader->sequence == ack) {
 			write(1, data, myheader->length);
-			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
+			mylog("\n[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
 			while(window[counter + 1 % WINDOW_SIZE]) {
 				ack += window[counter + 1 %WINDOW_SIZE]->hdr.length;
 				fin = window[counter + 1 % WINDOW_SIZE]->hdr.fin;
-				write(1, window[counter + 1 % WINDOW_SIZE], window[counter + 1 % WINDOW_SIZE]->hdr.length),
+				write(1, window[counter + 1 % WINDOW_SIZE]->data, window[counter + 1 % WINDOW_SIZE]->hdr.length),
 				free(window[counter + 1 % WINDOW_SIZE]); 
 				window[counter + 1 % WINDOW_SIZE] = NULL;
 				counter++;
 			}
-			mylog("[send ack] %d\n",ack);
+			mylog("\n[send ack] %d\n",ack);
 			header *responseheader = make_header(ack, 0, fin, 1);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
@@ -144,6 +144,7 @@ int main() {
 		//TODO: bug if sequence, ack both near 2^32, sequence could be out of order and roll-over and be caught by this case
 		//Received duplicate packet
 		} else if(myheader->sequence < ack) {
+			mylog("[recv dup] %d\n", myheader->sequence);
 			//Send ack for what we have already accepted
 			header *responseheader = make_header(ack, 0, myheader->fin, 1);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
@@ -154,15 +155,23 @@ int main() {
 		//Received a packet above the expected packet, but within window size
 		} else {
 			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (out-of-order)");
+			header *responseheader = make_header(ack, 0, 0, 1);
+			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
+			  perror("sendto");
+				//free_window(window);
+			  exit(1);
+			}
 
 			packet * pkt = malloc(1480);
 			pkt->hdr = *myheader;
 			memcpy(pkt->data, data, DATA_SIZE);
-			window[counter % WINDOW_SIZE] = pkt;		
+			unsigned int index = counter + (myheader->sequence - ack)/DATA_SIZE;
+			window[index % WINDOW_SIZE] = pkt;		
 		}
 
     } else {
       mylog("[error] timeout occurred\n");
+		//free_window(window);
       exit(1);
     }
   }

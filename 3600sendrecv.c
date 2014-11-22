@@ -65,14 +65,18 @@ int valid_checksum(unsigned char * data) {
  * eventually free-ing the header.
  */
 header *make_header(int sequence, int length, int fin, int ack) {
-  header *myheader = (header *) malloc(sizeof(header));
-  myheader->magic = MAGIC;
-  myheader->fin = fin;
-  myheader->sequence = htonl(sequence);
-  myheader->length = htons(length);
-  myheader->ack = ack;
+	header *myheader = (header *) malloc(sizeof(header));
+	myheader->magic = MAGIC;
+	myheader->fin = fin;
+	if(ack) {
+		myheader->acknum = htonl(sequence);
+	} else {
+		myheader->sequence = htonl(sequence);
+	}
+	myheader->length = htons(length);
+	myheader->ack = ack;
 
-  return myheader;
+	return myheader;
 }
 
 /**
