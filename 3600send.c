@@ -55,6 +55,15 @@ packet *get_next_packet(int *len, unsigned int index) {
 	if (data_len == 0) {
 		free(data);
 		return NULL;
+		/*
+		header *myheader = make_header(sequence, 0, 1, 0);
+		packet *next_packet = malloc(sizeof(packet));
+		next_packet->hdr = *myheader;
+		window[index % WINDOW_SIZE] = next_packet;
+		free(myheader);
+		*len = sizeof(header);
+		return next_packet;
+		*/
 	}
 
 	header *myheader = make_header(sequence, data_len, 0, 0);
@@ -73,20 +82,20 @@ packet *get_next_packet(int *len, unsigned int index) {
 	return next_packet;
 }
 
-int send_next_packet(int sock, struct sockaddr_in out, unsigned int index) {
+int send_next_packet(int sock, struct sockaddr_in out, unsigned int index, int send_eof) {
 	int packet_len = 0;
 	packet *next_packet = get_next_packet(&packet_len, index);
 
 	if (next_packet == NULL) {
-	  /*
-		header *myheader = make_header(sequence, 0, 1, 0);
-	  mylog("[send eof]\n");
+		if(send_eof) {
+			mylog("[send eof]\n");
+			header *myheader = make_header(sequence, 0, 1, 0);
 
-	  if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
-		perror("sendto");
-		exit(1);
-	  }
-	*/
+			if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
+				perror("sendto");
+				exit(1);
+			}
+		}
 		return 0;
 	}
 	mylog("[send data] %d (%d)\n", ntohl(next_packet->hdr.sequence), packet_len - sizeof(header));
@@ -103,7 +112,7 @@ int send_next_window(int sock, struct sockaddr_in out) {
 	for(int i = 0; i < WINDOW_SIZE; ++i) {
 		//If there is no more data, and we have received an ack for every packet that we have sent,
 		//we can exit.
-		if(!send_next_packet(sock, out, ack_counter + i)) {
+		if(!send_next_packet(sock, out, ack_counter + i, 1)) {
 			break;
 		}
 	}
@@ -165,7 +174,7 @@ int main(int argc, char *argv[]) {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 5;
+  t.tv_sec = 2;
   t.tv_usec = 0;
 
   while (send_next_window(sock, out)) {
@@ -173,7 +182,7 @@ int main(int argc, char *argv[]) {
 
 	int dup_counter = 0;
 
-	t.tv_sec += 5;
+	t.tv_sec += 2;
 
     while (! done) {
       FD_ZERO(&socks);
@@ -200,6 +209,10 @@ int main(int argc, char *argv[]) {
 		} else if(myheader->ack != 1) {
 			mylog("[ack not an ack] %d\n", myheader->sequence);
 			break;
+		} else if(myheader->fin) {
+			//free_window(window);
+			mylog("[completed]\n");
+			return 0;
 		}
 
         if ((ntohl(myheader->acknum) > acknum)) {
@@ -212,7 +225,8 @@ int main(int argc, char *argv[]) {
 				}
 				free(window[ack_counter % WINDOW_SIZE]);
 				window[ack_counter % WINDOW_SIZE] = NULL;			
-
+				
+				send_next_packet(sock, out, ack_counter + WINDOW_SIZE, 0);
 				ack_counter++;
 			}
 			if(sequence == acknum) {
@@ -221,9 +235,9 @@ int main(int argc, char *argv[]) {
         } else if(ntohl(myheader->acknum) == acknum) {
 			mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
-			if(dup_counter == 3) {
+			if(dup_counter == 5) {
 				mylog("[resend data] %d\n", acknum);
-				send_next_packet(sock, out, ack_counter);
+				send_next_packet(sock, out, ack_counter, 0);
 				dup_counter = 0;
 			}
         } else {
@@ -232,8 +246,7 @@ int main(int argc, char *argv[]) {
 		}
       } else {
         mylog("[error] timeout occurred\n");
-	//	send_next_packet(sock, out, ack_counter);
-		t.tv_sec += 5;
+		t.tv_sec += 2;
 		done = 1;
       }
     }

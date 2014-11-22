@@ -118,7 +118,7 @@ int main() {
 		//Got the sequence value that we were expecting
 		if(myheader->sequence == ack) {
 			write(1, data, myheader->length);
-			mylog("\n[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
+			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
 			counter++;
@@ -130,7 +130,7 @@ int main() {
 				window[counter % WINDOW_SIZE] = NULL;
 				counter++;
 			}
-			mylog("\n[send ack] %d\n",ack);
+			mylog("[send ack] %d\n",ack);
 			header *responseheader = make_header(ack, 0, fin, 1);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
