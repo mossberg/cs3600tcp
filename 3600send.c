@@ -112,7 +112,7 @@ int send_next_window(int sock, struct sockaddr_in out) {
 	for(int i = 0; i < WINDOW_SIZE; ++i) {
 		//If there is no more data, and we have received an ack for every packet that we have sent,
 		//we can exit.
-		if(!send_next_packet(sock, out, ack_counter + i, 1)) {
+		if(!send_next_packet(sock, out, ack_counter + i, 0)) {
 			break;
 		}
 	}
@@ -172,17 +172,25 @@ int main(int argc, char *argv[]) {
   // construct the socket set
   fd_set socks;
 
+	//Handshake
+
+	int rtt_sec = 0;
+	int rtt_usec = 2*500000;
+
+
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 2;
-  t.tv_usec = 0;
+  t.tv_sec = rtt_sec;
+  t.tv_usec = rtt_usec;
 
   while (send_next_window(sock, out)) {
     int done = 0;
 
 	int dup_counter = 0;
 
-	t.tv_sec += 2;
+	//half a second
+	t.tv_sec += rtt_sec;
+	t.tv_usec += rtt_usec;
 
     while (! done) {
       FD_ZERO(&socks);
@@ -217,6 +225,7 @@ int main(int argc, char *argv[]) {
 
         if ((ntohl(myheader->acknum) > acknum)) {
 			mylog("[recv ack] %d, %d\n", ntohl(myheader->acknum), acknum);
+			dup_counter = 0;
 			acknum = ntohl(myheader->acknum);		
 			
 			while(window[ack_counter % WINDOW_SIZE] != NULL) {
@@ -229,13 +238,18 @@ int main(int argc, char *argv[]) {
 				send_next_packet(sock, out, ack_counter + WINDOW_SIZE, 0);
 				ack_counter++;
 			}
+			/*
+			t.tv_sec += rtt_sec;
+			t.tv_usec += rtt_usec;
+			*/
 			if(sequence == acknum) {
 				done = 1;
-			}			
-        } else if(ntohl(myheader->acknum) == acknum) {
-			mylog("[recv out of order or dup ack] %d\n", acknum);
+			}
+						
+		} else if(ntohl(myheader->acknum) == acknum) {
+				mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
-			if(dup_counter == 5) {
+			if(dup_counter == 3) {
 				mylog("[resend data] %d\n", acknum);
 				send_next_packet(sock, out, ack_counter, 0);
 				dup_counter = 0;
@@ -246,15 +260,52 @@ int main(int argc, char *argv[]) {
 		}
       } else {
         mylog("[error] timeout occurred\n");
-		t.tv_sec += 2;
+		/*
+		t.tv_sec += rtt_sec;
+		t.tv_usec += rtt_usec;
+		*/
 		done = 1;
       }
     }
   }
 
-  send_final_packet(sock, out);
+	t.tv_sec += rtt_sec;
+	t.tv_sec += rtt_usec;
+	while(1) {
+		send_final_packet(sock, out);
+		FD_ZERO(&socks);
+		FD_SET(sock, &socks);
 
-  mylog("[completed]\n");
+		// wait to receive, or for a timeout
+		if (select(sock + 1, &socks, NULL, NULL, &t)) {
+			unsigned char buf[10000];
+			int buf_len = sizeof(buf);
+			int received;
+			if ((received = recvfrom(sock, &buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
+			  perror("recvfrom");
+			  exit(1);
+			}
+			header *myheader = get_header(buf);
+
+			if(!valid_checksum(buf)) {
+				mylog("[ack checksum invalid] %d \n", myheader->sequence);
+				break;
+			} else if(myheader->magic != MAGIC) {
+				mylog("[ack magic invalid] %x %d\n", myheader->sequence);
+				break;
+			} else if(myheader->ack != 1) {
+				mylog("[ack not an ack] %d\n", myheader->sequence);
+				break;
+			} else if(myheader->fin) {
+				//free_window(window);
+				mylog("[completed]\n");
+				return 0;
+			}
+		}
+
+		t.tv_sec += rtt_sec;
+		t.tv_usec += rtt_usec;
+	}
 
   return 0;
 }
