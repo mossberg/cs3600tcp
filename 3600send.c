@@ -218,7 +218,7 @@ int main(int argc, char *argv[]) {
 			mylog("[ack not an ack] %d\n", myheader->sequence);
 			break;
 		} else if(myheader->fin) {
-			//free_window(window);
+			free_window(window);
 			mylog("[completed]\n");
 			return 0;
 		}
@@ -297,7 +297,7 @@ int main(int argc, char *argv[]) {
 				mylog("[ack not an ack] %d\n", myheader->sequence);
 				break;
 			} else if(myheader->fin) {
-				//free_window(window);
+				free_window(window);
 				mylog("[completed]\n");
 				return 0;
 			}
