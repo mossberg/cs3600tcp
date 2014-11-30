@@ -34,14 +34,17 @@ typedef struct packet_t {
 
 unsigned int MAGIC;
 
-int valid_checksum(unsigned char * data);
-unsigned short calc_checksum(unsigned char * data);
+int valid_checksum_pkt(unsigned short checksum, packet *pkt);
+int valid_checksum_hdr(unsigned short checksum, header *hdr);
+unsigned short calc_checksum(unsigned char * _data, int count);
 void free_window(packet **window);
 
 void dump_packet(unsigned char *data, int size);
-header *make_header(int sequence, int length, int fin, int ack);
+header *make_header(int sequence, short length, int fin, int ack);
+unsigned short ones_sum(unsigned char * _data, int count);
+unsigned short calc_checksum(unsigned char * data, int count);
 header *get_header(void *data);
-char *get_data(void *data);
+unsigned char *get_data(void *data);
 char *timestamp();
 void mylog(char *fmt, ...);
 

@@ -91,6 +91,10 @@ int main() {
 
     if (select(sock + 1, &socks, NULL, NULL, &t)) {
       int received;
+      /* this is necessary because the sender only sends what data is reads
+         so if it reads less data than DATA_SIZE and we don't memset buf, we'll
+         have leftover memory */
+      memset(buf, 0, buf_len);
       if ((received = recvfrom(sock, buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
         perror("recvfrom");
 		free(buf);
@@ -98,16 +102,14 @@ int main() {
 	    exit(1);
       }
 
-		
-
-
+        /* interpret incoming packet bytes */
 		header *myheader = get_header(buf);
-		char *data = get_data(buf);
-		
+		unsigned char *data = get_data(buf);
+
 		if(myheader->sequence > ack + DATA_SIZE * WINDOW_SIZE) {
 			mylog("[received packet outside of window]\n");
 			continue;
-		} else if(!valid_checksum(buf)) {
+		} else if(!valid_checksum_pkt(myheader->checksum,  buf)) {
 			mylog("[data corrupted]\n");
 			continue;
 		} else if(myheader->magic != MAGIC) {
@@ -130,8 +132,15 @@ int main() {
 				window[counter % WINDOW_SIZE] = NULL;
 				counter++;
 			}
+
 			mylog("[send ack] %d\n",ack);
+
+            /* the receiver doesn't have to send full packets, just headers */
 			header *responseheader = make_header(ack, 0, fin, 1);
+            /* make_header() doesn't conver the cksum to network order 
+             * so do it manually */
+            responseheader->checksum = htons(responseheader->checksum);
+
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
 		      free_window(window);
@@ -157,6 +166,7 @@ int main() {
 		} else {
 			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (out-of-order)");
 			header *responseheader = make_header(ack, 0, 0, 1);
+            mylog("[send ack] %d\n",ack);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
 				free_window(window);
