@@ -74,11 +74,13 @@ int main() {
 	int buf_len = 1500;
 	void* buf = malloc(buf_len);
 
-	packet * window[WINDOW_SIZE] = {0};
+	packet * window[MAX_WINDOW_SIZE] = {0};
 
 	unsigned int counter = 0;
 	unsigned int ack = 0;
 	
+	unsigned window_size = MAX_WINDOW_SIZE;
+
 	while(0) {
 		//TCP Handshake
 		//Initialize 
@@ -104,7 +106,7 @@ int main() {
 		header *myheader = get_header(buf);
 		char *data = get_data(buf);
 		
-		if(myheader->sequence > ack + DATA_SIZE * WINDOW_SIZE) {
+		if(myheader->sequence > ack + DATA_SIZE * window_size) {
 			mylog("[received packet outside of window]\n");
 			continue;
 		} else if(!valid_checksum(buf)) {
@@ -122,12 +124,12 @@ int main() {
 			ack += myheader->length;
 			int fin = myheader->fin;
 			counter++;
-			while(window[counter % WINDOW_SIZE] != NULL) {
-				ack += window[counter %WINDOW_SIZE]->hdr.length;
-				fin = window[counter % WINDOW_SIZE]->hdr.fin;
-				write(1, window[counter % WINDOW_SIZE]->data, window[counter % WINDOW_SIZE]->hdr.length),
-				free(window[counter % WINDOW_SIZE]); 
-				window[counter % WINDOW_SIZE] = NULL;
+			while(window[counter % window_size] != NULL) {
+				ack += window[counter % window_size]->hdr.length;
+				fin = window[counter % window_size]->hdr.fin;
+				write(1, window[counter % window_size]->data, window[counter % window_size]->hdr.length),
+				free(window[counter % window_size]); 
+				window[counter % window_size] = NULL;
 				counter++;
 			}
 			mylog("[send ack] %d\n",ack);
@@ -157,6 +159,8 @@ int main() {
 		} else {
 			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (out-of-order)");
 			header *responseheader = make_header(ack, 0, 0, 1);
+			mylog("[send ack] %d\n",ack);
+			
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
 				//free_window(window);
@@ -170,7 +174,7 @@ int main() {
 			if(myheader->sequence - ack < DATA_SIZE) {
 				index++;
 			}
-			window[index % WINDOW_SIZE] = pkt;		
+			window[index % window_size] = pkt;		
 		}
 
     } else {
