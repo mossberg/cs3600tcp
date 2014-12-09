@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
 
 	int millisecond = 1000;
 	int rtt_sec = 0;
-	int rtt_usec = 50 * millisecond;
+	int rtt_usec = 100 * millisecond;
 
 
   // construct the timeout
@@ -280,8 +280,8 @@ int main(int argc, char *argv[]) {
 				ack_counter++;
 			}
 			
-			t.tv_sec = rtt_sec;
-			t.tv_usec = rtt_usec;
+	//		t.tv_sec = rtt_sec;
+			t.tv_usec += millisecond;
 			if(rtt_usec > 10 * millisecond) {
 				rtt_usec -= millisecond;
 			}
@@ -292,10 +292,12 @@ int main(int argc, char *argv[]) {
 			}
 						
 		} else if(ntohl(myheader->acknum) == acknum) {
-			rtt_usec += 10 * millisecond;
+			//Increment rtt, and wait for additional time for an extra packet to return
+			rtt_usec += millisecond;
+			t.tv_usec += millisecond;
 			mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
-			if(CUR_WINDOW_SIZE > 0) { CUR_WINDOW_SIZE--; }
+			if(CUR_WINDOW_SIZE > 3) { CUR_WINDOW_SIZE--; }
 			if(dup_counter == 3) {
 				mylog("[resend data] %d\n", acknum);
 				send_next_packet(sock, out, ack_counter, 0);
@@ -310,27 +312,27 @@ int main(int argc, char *argv[]) {
 		//Increase the timeout amount
 		rtt_sec *= 2;
 		rtt_usec *= 2;
-		//Decrease the window size		
-		if(CUR_WINDOW_SIZE == 0) {
+		//Set a hard limit for how large our timeout can be (3 seconds)
+		if(rtt_usec > 3000 * millisecond) { rtt_usec = 3000*millisecond; }
+		//If we waited a timeout without sending anything, and didn't receive any
+		//Response packets during it, optimistically increase the window to resend
+		//data
+		if(CUR_WINDOW_SIZE <= 4) {
 			CUR_WINDOW_SIZE = 10;
+		//Decrease the window size to 1/2
 		} else {
-			CUR_WINDOW_SIZE >>= 1;
+			CUR_WINDOW_SIZE /= 2;
 		}
 	
 		done = 1;
       }
     }
   }
-
-	t.tv_sec = rtt_sec;
-	t.tv_sec = rtt_usec;
 	//Send the final packet a bunch of times for good luck
 	for(int i = 0; i < 5; ++i) {
 		send_final_packet(sock, out);
 	}
-	if(recv_final_packet(sock, &socks, (struct sockaddr *)&in, in_len, &t)) {
-		//try to get the final ack, if not, ehh, the received probably got it anyways
-	}
+	// Don't even worry about receiving the final ack, they probably got it anyways with the 5 EOFs
 	mylog("[completed]\n");
 	return 0;
 }

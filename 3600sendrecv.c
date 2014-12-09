@@ -60,7 +60,7 @@ int valid_checksum(unsigned char * data) {
 }
 
 void free_window(packet **window) {
-    for (int i = 0; i < WINDOW_SIZE; i++) {
+    for (int i = 0; i < MAX_WINDOW_SIZE; i++) {
         free(window[i]);
     }
 }
