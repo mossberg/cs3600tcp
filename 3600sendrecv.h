@@ -36,6 +36,7 @@ unsigned int MAGIC;
 
 int valid_checksum(unsigned char * data);
 unsigned short calc_checksum(unsigned char * data);
+void free_window(packet **window);
 
 void dump_packet(unsigned char *data, int size);
 header *make_header(int sequence, int length, int fin, int ack);

@@ -59,6 +59,12 @@ int valid_checksum(unsigned char * data) {
 	return 1;
 }
 
+void free_window(packet **window) {
+    for (int i = 0; i < WINDOW_SIZE; i++) {
+        free(window[i]);
+    }
+}
+
 /**
  * This function takes in a bunch of header fields and 
  * returns a brand new header.  The caller is responsible for

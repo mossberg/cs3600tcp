@@ -136,7 +136,7 @@ int main() {
 			header *responseheader = make_header(ack, 0, fin, 1);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
-				//free_window(window);
+		      free_window(window);
 			  exit(1);
 			}
 			if (fin) {
@@ -152,7 +152,7 @@ int main() {
 			header *responseheader = make_header(ack, 0, myheader->fin, 1);
 			if (sendto(sock, responseheader, sizeof(struct header_t), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
-				//free_window(window);
+		      free_window(window);
 			  exit(1);
 			}
 		//Received a packet above the expected packet, but within window size
@@ -163,7 +163,7 @@ int main() {
 			
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
-				//free_window(window);
+				free_window(window);
 			  exit(1);
 			}
 
@@ -179,7 +179,7 @@ int main() {
 
     } else {
       mylog("[error] timeout occurred\n");
-		//free_window(window);
+		free_window(window);
       exit(1);
     }
   }
