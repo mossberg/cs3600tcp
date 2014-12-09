@@ -255,15 +255,10 @@ int main(int argc, char *argv[]) {
 		} else if(myheader->ack != 1) {
 			mylog("[ack not an ack] %d\n", myheader->sequence);
 			break;
-<<<<<<< HEAD
 		} 
 		/*
 		else if(myheader->fin) {
 			//free_window(window);
-=======
-		} else if(myheader->fin) {
-			free_window(window);
->>>>>>> 3923572e40ccdb96f473b07581ee84050d9c4930
 			mylog("[completed]\n");
 			return 0;
 		}
@@ -332,41 +327,6 @@ int main(int argc, char *argv[]) {
 	//Send the final packet a bunch of times for good luck
 	for(int i = 0; i < 5; ++i) {
 		send_final_packet(sock, out);
-<<<<<<< HEAD
-=======
-		FD_ZERO(&socks);
-		FD_SET(sock, &socks);
-
-		// wait to receive, or for a timeout
-		if (select(sock + 1, &socks, NULL, NULL, &t)) {
-			unsigned char buf[10000];
-			int buf_len = sizeof(buf);
-			int received;
-			if ((received = recvfrom(sock, &buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
-			  perror("recvfrom");
-			  exit(1);
-			}
-			header *myheader = get_header(buf);
-
-			if(!valid_checksum(buf)) {
-				mylog("[ack checksum invalid] %d \n", myheader->sequence);
-				break;
-			} else if(myheader->magic != MAGIC) {
-				mylog("[ack magic invalid] %x %d\n", myheader->sequence);
-				break;
-			} else if(myheader->ack != 1) {
-				mylog("[ack not an ack] %d\n", myheader->sequence);
-				break;
-			} else if(myheader->fin) {
-				free_window(window);
-				mylog("[completed]\n");
-				return 0;
-			}
-		}
-
-		t.tv_sec += rtt_sec;
-		t.tv_usec += rtt_usec;
->>>>>>> 3923572e40ccdb96f473b07581ee84050d9c4930
 	}
 	if(recv_final_packet(sock, &socks, (struct sockaddr *)&in, in_len, &t)) {
 		//try to get the final ack, if not, ehh, the received probably got it anyways
