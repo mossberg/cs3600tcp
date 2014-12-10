@@ -173,7 +173,7 @@ int recv_final_packet(int sock , fd_set * socks, struct sockaddr *in, socklen_t 
 		}
 		header *myheader = get_header(buf);
 
-		if(!valid_checksum(buf)) {
+		if(!valid_checksum_hdr(myheader->checksum, myheader)) {
 			mylog("[ack checksum invalid] %d \n", myheader->sequence);
 			return 0;
 		} else if(myheader->magic != MAGIC) {

@@ -107,7 +107,7 @@ int main() {
         /* interpret incoming packet bytes */
 		header *myheader = get_header(buf);
 		unsigned char *data = get_data(buf);
-		if(myheader->sequence > ack + DATA_SIZE * WINDOW_SIZE) {
+		if(myheader->sequence > ack + DATA_SIZE * window_size) {
 			mylog("[received packet outside of window]\n");
 			continue;
 		} else if(!valid_checksum_pkt(myheader->checksum,  buf)) {
