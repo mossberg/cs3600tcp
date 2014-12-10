@@ -53,10 +53,58 @@ void mylog(char *fmt, ...) {
   va_end(args);
 }
 
-//TODO: Implements CRC16/TCP Checksum, returns 1 if the checksum is valid, 0 otherwise
-int valid_checksum(unsigned char * data) {
+/* returns 1 if valid, 0 if not */
+int valid_checksum_pkt(unsigned short checksum, packet  *pkt) {
+    header tmphdr;
+    memcpy(&tmphdr, &pkt->hdr, sizeof(pkt->hdr));
+    tmphdr.checksum = 0; /* remove checksum from header before calculating */
 
-	return 1;
+    /* verify 2 stage checksum */
+    unsigned short hdr_cksum = calc_checksum((unsigned char *) &(tmphdr), sizeof(header));
+    unsigned short data_chksum = calc_checksum((unsigned char *) pkt->data, DATA_SIZE);
+    unsigned short tmp = hdr_cksum + data_chksum;
+    if(tmp < hdr_cksum) {tmp++;}
+
+    return checksum == tmp;
+}
+
+/* returns 1 if valid, 0 if not */
+int valid_checksum_hdr(unsigned short checksum, header *hdr) {
+    header tmphdr;
+    memcpy(&tmphdr, hdr, sizeof(*hdr));
+    tmphdr.checksum = 0; /* remove checksum from header before calculating */
+    unsigned short hdr_cksum = calc_checksum((unsigned char *) &(tmphdr), sizeof(header));
+    return checksum == hdr_cksum;
+}
+
+unsigned short calc_checksum(unsigned char * data, int count) {
+    return ~ones_sum(data, count);
+}
+
+/*
+ * ones_sum - Calculates checksum of data
+ * @data: data buffer
+ * @count: length of data
+ *
+ * Assumes data can be divided into 2 byte words.
+ */
+unsigned short ones_sum(unsigned char * _data, int count) {
+    /* recast so data++ advances by 2 bytes instead of 1 */
+    unsigned short * data = (unsigned short *) _data;
+    int sum = 0;
+    count /= 2;
+
+    /* sum all 2 byte data words */
+    while (count--) {
+        sum += *data++;
+        /* overflow check */
+        if (sum & 0xffff0000) {
+            sum &= 0xffff;
+            sum += 1;
+        }
+    }
+
+    return sum;
 }
 
 void free_window(packet **window) {
@@ -70,8 +118,8 @@ void free_window(packet **window) {
  * returns a brand new header.  The caller is responsible for
  * eventually free-ing the header.
  */
-header *make_header(int sequence, int length, int fin, int ack) {
-	header *myheader = (header *) malloc(sizeof(header));
+header *make_header(int sequence, short length, int fin, int ack) {
+	header *myheader = (header *) calloc(1, sizeof(header));
 	myheader->magic = MAGIC;
 	myheader->fin = fin;
 	if(ack) {
@@ -81,6 +129,24 @@ header *make_header(int sequence, int length, int fin, int ack) {
 	}
 	myheader->length = htons(length);
 	myheader->ack = ack;
+    /* myheader->checksum = 0; */
+
+    /* calculate checksum in host order */
+    header cksum_header;
+    memset(&cksum_header, 0, sizeof(cksum_header));
+    cksum_header.magic = MAGIC;
+    cksum_header.fin = fin;
+	if(ack) {
+		cksum_header.acknum = sequence;
+	} else {
+		cksum_header.sequence = sequence;
+	}
+	cksum_header.length = length;
+	cksum_header.ack = ack;
+    cksum_header.checksum = 0;
+
+    /* incomplete checksum (just of header) */
+    myheader->checksum = calc_checksum((unsigned char *) &cksum_header, sizeof(cksum_header));
 
 	return myheader;
 }
@@ -91,8 +157,10 @@ header *make_header(int sequence, int length, int fin, int ack) {
  */
 header *get_header(void *data) {
   header *h = (header *) data;
+  h->acknum = ntohl(h->acknum);
   h->sequence = ntohl(h->sequence);
   h->length = ntohs(h->length);
+  h->checksum = ntohs(h->checksum);
 
   return h;
 }
@@ -101,8 +169,8 @@ header *get_header(void *data) {
  * This function takes a returned packet and returns a pointer to the data.  It
  * does not allocate any new memory, so no free is needed.
  */
-char *get_data(void *data) {
-  return (char *) data + sizeof(header);
+unsigned char *get_data(void *data) {
+  return (unsigned char *) data + sizeof(header);
 }
 
 /**

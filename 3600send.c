@@ -50,7 +50,7 @@ packet *get_next_packet(int *len, unsigned int index) {
 		*len = ntohs(window[index % MAX_WINDOW_SIZE]->hdr.length) + sizeof(header);
 		return window[index % MAX_WINDOW_SIZE];
 	}
-	char *data = malloc(DATA_SIZE);
+	char *data = calloc(1, DATA_SIZE);
 	int data_len = get_next_data(data, DATA_SIZE);
 
 	if (data_len == 0) {
@@ -68,8 +68,22 @@ packet *get_next_packet(int *len, unsigned int index) {
 	}
 
 	header *myheader = make_header(sequence, data_len, 0, 0);
+    /* we can simply add the checksums for the data and header! math!
+     * Since we are adding bits mod 2^16, if we overflow on our addition we will
+     * be off by 1, and so need to add back
+     *
+     * Here we're doing a 2 stage checksum. First part is done in make_header()
+     * and the second is done right below. The two are added together to form
+     * the final checksum.
+     */
+    unsigned short tmp = myheader->checksum;
+    unsigned short ck = calc_checksum((unsigned char *) data, DATA_SIZE);
+    tmp += ck;
+    if(tmp < myheader->checksum) {tmp++;}
+    myheader->checksum = htons(tmp);
+
 	sequence += data_len;
-	packet *next_packet = malloc(sizeof(packet));
+	packet *next_packet = calloc(1, sizeof(packet));
 	next_packet->hdr = *myheader;
 	memcpy(next_packet->data, data, data_len);
 
@@ -90,9 +104,16 @@ int send_next_packet(int sock, struct sockaddr_in out, unsigned int index, int s
 	if (next_packet == NULL) {
 		if(send_eof) {
 			mylog("[send eof]\n");
-			header *myheader = make_header(sequence, 0, 1, 0);
 
-			if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
+            /* we only need to send the header here, but to simplify processing
+             * on the sender end, we'll send a full (empty) packet */
+            packet eofpkt;
+            memset(&eofpkt, 0, sizeof(eofpkt));
+			header *myheader = make_header(sequence, 0, 1, 0);
+            myheader->checksum = htons(myheader->checksum);
+            eofpkt.hdr = *myheader;
+
+			if (sendto(sock, &eofpkt, sizeof(eofpkt), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
 				perror("sendto");
 				exit(1);
 			}
@@ -124,10 +145,15 @@ int send_next_window(int sock, struct sockaddr_in out) {
 	return 1;
 }
 void send_final_packet(int sock, struct sockaddr_in out) {
+  mylog("[send eof 1]\n");
+  /* same as above; send a full packet even though it's not strictly necessary */
+  packet eofpkt;
+  memset(&eofpkt, 0, sizeof(eofpkt));
   header *myheader = make_header(sequence, 0, 1, 0);
-  mylog("[send eof]\n");
+  myheader->checksum = htons(myheader->checksum);
+  eofpkt.hdr = *myheader;
 
-  if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
+  if (sendto(sock, &eofpkt, sizeof(eofpkt), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
     perror("sendto");
     exit(1);
   }
@@ -244,9 +270,10 @@ int main(int argc, char *argv[]) {
           exit(1);
         }
 
+        /* super simple. the sender never receives full packets from the receiver,
+         * just headers */
         header *myheader = get_header(buf);
-
-		if(!valid_checksum(buf)) {
+		if(!valid_checksum_hdr(myheader->checksum, myheader)) {
             mylog("[ack checksum invalid] %d \n", myheader->sequence);
 			break;
 		} else if(myheader->magic != MAGIC) {
@@ -264,10 +291,10 @@ int main(int argc, char *argv[]) {
 		}
 		*/	
 
-        if ((ntohl(myheader->acknum) > acknum)) {
-			mylog("[recv ack] %d, %d\n", ntohl(myheader->acknum), acknum);
+        if ((myheader->acknum > acknum)) {
+			mylog("[recv ack] %d, %d\n", myheader->acknum, acknum);
 			dup_counter = 0;
-			acknum = ntohl(myheader->acknum);		
+			acknum = myheader->acknum;		
 			
 			while(window[ack_counter % MAX_WINDOW_SIZE] != NULL) {
 				if(acknum == ntohl(window[ack_counter % MAX_WINDOW_SIZE]->hdr.sequence)) {
@@ -291,7 +318,7 @@ int main(int argc, char *argv[]) {
 				done = 1;
 			}
 						
-		} else if(ntohl(myheader->acknum) == acknum) {
+		} else if(myheader->acknum == acknum) {
 			//Increment rtt, and wait for additional time for an extra packet to return
 			rtt_usec += millisecond;
 			t.tv_usec += millisecond;
@@ -304,7 +331,7 @@ int main(int argc, char *argv[]) {
 				dup_counter = 0;
 			}
         } else {
-			mylog("[recv old ack] %d %d\n", ntohl(myheader->acknum), acknum);
+			mylog("[recv old ack] %d %d\n", myheader->acknum, acknum);
 			continue;
 		}
       } else {
