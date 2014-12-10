@@ -34,8 +34,8 @@ typedef struct packet_t {
 
 unsigned int MAGIC;
 
-int valid_checksum_pkt(unsigned short checksum, packet *pkt);
-int valid_checksum_hdr(unsigned short checksum, header *hdr);
+int valid_checksum_pkt(packet *pkt);
+int valid_checksum_hdr(header *hdr);
 unsigned short calc_checksum(unsigned char * _data, int count);
 void free_window(packet **window);
 

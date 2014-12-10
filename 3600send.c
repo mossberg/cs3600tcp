@@ -173,7 +173,7 @@ int recv_final_packet(int sock , fd_set * socks, struct sockaddr *in, socklen_t 
 		}
 		header *myheader = get_header(buf);
 
-		if(!valid_checksum_hdr(myheader->checksum, myheader)) {
+		if(!valid_checksum_hdr(myheader)) {
 			mylog("[ack checksum invalid] %d \n", myheader->sequence);
 			return 0;
 		} else if(myheader->magic != MAGIC) {
@@ -273,7 +273,7 @@ int main(int argc, char *argv[]) {
         /* super simple. the sender never receives full packets from the receiver,
          * just headers */
         header *myheader = get_header(buf);
-		if(!valid_checksum_hdr(myheader->checksum, myheader)) {
+		if(!valid_checksum_hdr(myheader)) {
             mylog("[ack checksum invalid] %d \n", myheader->sequence);
 			break;
 		} else if(myheader->magic != MAGIC) {

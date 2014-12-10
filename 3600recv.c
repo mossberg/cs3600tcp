@@ -110,7 +110,7 @@ int main() {
 		if(myheader->sequence > ack + DATA_SIZE * window_size) {
 			mylog("[received packet outside of window]\n");
 			continue;
-		} else if(!valid_checksum_pkt(myheader->checksum,  buf)) {
+		} else if(!valid_checksum_pkt(buf)) {
 			mylog("[data corrupted]\n");
 			continue;
 		} else if(myheader->magic != MAGIC) {

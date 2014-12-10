@@ -54,7 +54,7 @@ void mylog(char *fmt, ...) {
 }
 
 /* returns 1 if valid, 0 if not */
-int valid_checksum_pkt(unsigned short checksum, packet  *pkt) {
+int valid_checksum_pkt(packet *pkt) {
     header tmphdr;
     memcpy(&tmphdr, &pkt->hdr, sizeof(pkt->hdr));
     tmphdr.checksum = 0; /* remove checksum from header before calculating */
@@ -65,16 +65,16 @@ int valid_checksum_pkt(unsigned short checksum, packet  *pkt) {
     unsigned short tmp = hdr_cksum + data_chksum;
     if(tmp < hdr_cksum) {tmp++;}
 
-    return checksum == tmp;
+    return pkt->hdr.checksum == tmp;
 }
 
 /* returns 1 if valid, 0 if not */
-int valid_checksum_hdr(unsigned short checksum, header *hdr) {
+int valid_checksum_hdr(header *hdr) {
     header tmphdr;
     memcpy(&tmphdr, hdr, sizeof(*hdr));
     tmphdr.checksum = 0; /* remove checksum from header before calculating */
     unsigned short hdr_cksum = calc_checksum((unsigned char *) &(tmphdr), sizeof(header));
-    return checksum == hdr_cksum;
+    return hdr->checksum == hdr_cksum;
 }
 
 unsigned short calc_checksum(unsigned char * data, int count) {
