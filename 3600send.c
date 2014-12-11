@@ -115,9 +115,13 @@ int send_next_packet(int sock, struct sockaddr_in out, unsigned int index, int s
 }
 
 int send_next_window(int sock, struct sockaddr_in out) {
+	
 	for(unsigned int i = 0; i < CUR_WINDOW_SIZE; ++i) {
 		//If there is no more data, and we have received an ack for every packet that we have sent,
 		//we can exit.
+		if(CUR_WINDOW_SIZE < 5) {
+			send_next_packet(sock, out, ack_counter + i, 0);
+		}
 		if(!send_next_packet(sock, out, ack_counter + i, 0)) {
 			CUR_WINDOW_SIZE = i+1;
 			break;
@@ -220,7 +224,7 @@ int main(int argc, char *argv[]) {
 
 	int millisecond = 1000;
 	int rtt_sec = 0;
-	int rtt_usec = 125 * millisecond;
+	int rtt_usec = 50* millisecond;
 
 
   // construct the timeout
