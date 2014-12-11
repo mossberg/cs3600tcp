@@ -81,9 +81,6 @@ int main() {
 	
 	unsigned window_size = MAX_WINDOW_SIZE;
 
-	unsigned char print_buf[1000 * 1460] = {0};
-	const unsigned int PRINT_BUF_SIZE = 1000 * 1460;
-	unsigned int print_buf_offset = 0;
 
   // wait to receive, or for a timeout
   while (1) {
@@ -92,16 +89,12 @@ int main() {
 
     if (select(sock + 1, &socks, NULL, NULL, &t)) {
 	  int received;
-	 // memset(buf, 0, buf_len);
       if ((received = recvfrom(sock, buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
         perror("recvfrom");
 		free(buf);
 		//Cleanup Window
 	    exit(1);
       }
-
-		
-
 
 		header *myheader = get_header(buf);
 		char *data = get_data(buf);
@@ -119,28 +112,23 @@ int main() {
 		
 		//Got the sequence value that we were expecting
 		if(myheader->sequence == ack) {
-			if(print_buf_offset + myheader->length + DATA_SIZE*window_size > PRINT_BUF_SIZE) {
-				write(1, print_buf, print_buf_offset);
-				print_buf_offset = 0;
-			}
-			memcpy(print_buf + print_buf_offset, data, myheader->length);
-			print_buf_offset += myheader->length;
-			//write(1, data, myheader->length);
+			//Write the data to stdout
+			write(1, data, myheader->length);
 			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
 			counter++;
+			//For each additional packet that we have in the window, print it out and free the window slot
 			while(window[counter % window_size] != NULL) {
 				ack += window[counter % window_size]->hdr.length;
 				fin = window[counter % window_size]->hdr.fin;
-				memcpy(print_buf + print_buf_offset, window[counter % window_size]->data, window[counter % window_size]->hdr.length);
-				print_buf_offset += window[counter % window_size]->hdr.length;
-				//write(1, window[counter % window_size]->data, window[counter % window_size]->hdr.length),
+				write(1, window[counter % window_size]->data, window[counter % window_size]->hdr.length),
 				free(window[counter % window_size]); 
 				window[counter % window_size] = NULL;
 				counter++;
 			}
 			mylog("[send ack] %d\n",ack);
+			//Send the ack
 			header *responseheader = make_header(ack, 0, fin, 1);
 			if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
 			  perror("sendto");
@@ -148,7 +136,6 @@ int main() {
 			  exit(1);
 			}
 			if (fin) {
-			  write(1, print_buf, print_buf_offset);
 			  mylog("[recv fin]\n");
 			  mylog("[completed]\n");
 			  exit(0);
@@ -179,6 +166,7 @@ int main() {
 			unsigned int index = counter + (myheader->sequence - ack)/DATA_SIZE;
 			//If we received packets that we not completely full, we need to add extra space in the window for the fractional packet
 			//This will break if we receive two or more packets where their combined size is <= DATA_SIZE
+			//This also serves to place the final packet in the correct window slot
 			if(((myheader->sequence - ack)/DATA_SIZE)*DATA_SIZE < myheader->sequence - ack) {
 				index++;
 			}

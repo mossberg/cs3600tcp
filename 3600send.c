@@ -296,10 +296,9 @@ int main(int argc, char *argv[]) {
 		} else if(myheader->acknum == acknum) {
 			//Increment rtt, and wait for additional time for an extra packet to return
 			rtt_usec += millisecond;
-			//t.tv_usec += millisecond;
 			mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
-			if(CUR_WINDOW_SIZE > 3) { CUR_WINDOW_SIZE--; }
+			if(CUR_WINDOW_SIZE > 4) { CUR_WINDOW_SIZE--; }
 			if(dup_counter == 6) {
 				mylog("[resend data] %d\n", acknum);
 				//Send three times just in case, since the last time may have been lost as well
