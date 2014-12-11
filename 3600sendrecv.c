@@ -92,6 +92,7 @@ header *make_header(int sequence, int length, int fin, int ack) {
 header *get_header(void *data) {
   header *h = (header *) data;
   h->sequence = ntohl(h->sequence);
+  h->acknum= ntohl(h->acknum);
   h->length = ntohs(h->length);
 
   return h;

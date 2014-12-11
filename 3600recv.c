@@ -81,10 +81,9 @@ int main() {
 	
 	unsigned window_size = MAX_WINDOW_SIZE;
 
-	while(0) {
-		//TCP Handshake
-		//Initialize 
-	}
+	unsigned char print_buf[1000 * 1460] = {0};
+	const unsigned int PRINT_BUF_SIZE = 1000 * 1460;
+	unsigned int print_buf_offset = 0;
 
   // wait to receive, or for a timeout
   while (1) {
@@ -92,7 +91,8 @@ int main() {
     FD_SET(sock, &socks);
 
     if (select(sock + 1, &socks, NULL, NULL, &t)) {
-      int received;
+	  int received;
+	 // memset(buf, 0, buf_len);
       if ((received = recvfrom(sock, buf, buf_len, 0, (struct sockaddr *) &in, (socklen_t *) &in_len)) < 0) {
         perror("recvfrom");
 		free(buf);
@@ -119,7 +119,13 @@ int main() {
 		
 		//Got the sequence value that we were expecting
 		if(myheader->sequence == ack) {
-			write(1, data, myheader->length);
+			if(print_buf_offset + myheader->length + DATA_SIZE*window_size > PRINT_BUF_SIZE) {
+				write(1, print_buf, print_buf_offset);
+				print_buf_offset = 0;
+			}
+			memcpy(print_buf + print_buf_offset, data, myheader->length);
+			print_buf_offset += myheader->length;
+			//write(1, data, myheader->length);
 			mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
 			ack += myheader->length;
 			int fin = myheader->fin;
@@ -127,7 +133,9 @@ int main() {
 			while(window[counter % window_size] != NULL) {
 				ack += window[counter % window_size]->hdr.length;
 				fin = window[counter % window_size]->hdr.fin;
-				write(1, window[counter % window_size]->data, window[counter % window_size]->hdr.length),
+				memcpy(print_buf + print_buf_offset, window[counter % window_size]->data, window[counter % window_size]->hdr.length);
+				print_buf_offset += window[counter % window_size]->hdr.length;
+				//write(1, window[counter % window_size]->data, window[counter % window_size]->hdr.length),
 				free(window[counter % window_size]); 
 				window[counter % window_size] = NULL;
 				counter++;
@@ -140,6 +148,7 @@ int main() {
 			  exit(1);
 			}
 			if (fin) {
+			  write(1, print_buf, print_buf_offset);
 			  mylog("[recv fin]\n");
 			  mylog("[completed]\n");
 			  exit(0);
@@ -167,14 +176,20 @@ int main() {
 			  exit(1);
 			}
 
-			packet * pkt = malloc(1480);
-			pkt->hdr = *myheader;
-			memcpy(pkt->data, data, DATA_SIZE);
 			unsigned int index = counter + (myheader->sequence - ack)/DATA_SIZE;
-			if(myheader->sequence - ack < DATA_SIZE) {
+			//If we received packets that we not completely full, we need to add extra space in the window for the fractional packet
+			//This will break if we receive two or more packets where their combined size is <= DATA_SIZE
+			if(((myheader->sequence - ack)/DATA_SIZE)*DATA_SIZE < myheader->sequence - ack) {
 				index++;
 			}
-			window[index % window_size] = pkt;		
+	//		mylog("[place at index] %d\n", index);
+			//If the window slot is not empty, the received packet is a duplicate
+			if(window[index % window_size] == NULL) {
+				packet * pkt = malloc(1480);
+				pkt->hdr = *myheader;
+				memcpy(pkt->data, data, DATA_SIZE);
+				window[index % window_size] = pkt;		
+			}
 		}
 
     } else {

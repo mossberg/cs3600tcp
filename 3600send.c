@@ -53,8 +53,12 @@ packet *get_next_packet(int *len, unsigned int index) {
 	char *data = malloc(DATA_SIZE);
 	int data_len = get_next_data(data, DATA_SIZE);
 
+	if(data_len < DATA_SIZE) {
+		data_len += get_next_data(data + data_len, DATA_SIZE - data_len);	
+	}
 	if (data_len == 0) {
 		free(data);
+		mylog("[no data left, index empty] index: %u\n",index);
 		return NULL;
 		/*
 		header *myheader = make_header(sequence, 0, 1, 0);
@@ -66,6 +70,7 @@ packet *get_next_packet(int *len, unsigned int index) {
 		return next_packet;
 		*/
 	}
+
 
 	header *myheader = make_header(sequence, data_len, 0, 0);
 	sequence += data_len;
@@ -99,7 +104,7 @@ int send_next_packet(int sock, struct sockaddr_in out, unsigned int index, int s
 		}
 		return 0;
 	}
-	mylog("[send data] %d (%d)\n", ntohl(next_packet->hdr.sequence), packet_len - sizeof(header));
+	mylog("[send data] %d (%d) window index:%d\n", ntohl(next_packet->hdr.sequence), packet_len - sizeof(header), index);
 
 	if (sendto(sock, next_packet, packet_len, 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
 		perror("sendto");
@@ -114,6 +119,7 @@ int send_next_window(int sock, struct sockaddr_in out) {
 		//If there is no more data, and we have received an ack for every packet that we have sent,
 		//we can exit.
 		if(!send_next_packet(sock, out, ack_counter + i, 0)) {
+			CUR_WINDOW_SIZE = i+1;
 			break;
 		}
 	}
@@ -214,13 +220,15 @@ int main(int argc, char *argv[]) {
 
 	int millisecond = 1000;
 	int rtt_sec = 0;
-	int rtt_usec = 100 * millisecond;
+	int rtt_usec = 125 * millisecond;
 
 
   // construct the timeout
   struct timeval t;
   t.tv_sec = rtt_sec;
   t.tv_usec = rtt_usec;
+
+	int out_of_data = 0;
 
   while (send_next_window(sock, out)) {
     int done = 0;
@@ -256,31 +264,25 @@ int main(int argc, char *argv[]) {
 			mylog("[ack not an ack] %d\n", myheader->sequence);
 			break;
 		} 
-		/*
-		else if(myheader->fin) {
-			//free_window(window);
-			mylog("[completed]\n");
-			return 0;
-		}
-		*/	
 
-        if ((ntohl(myheader->acknum) > acknum)) {
-			mylog("[recv ack] %d, %d\n", ntohl(myheader->acknum), acknum);
+        if (myheader->acknum > acknum) {
+			mylog("[recv ack] %d, %d\n", myheader->acknum, acknum);
 			dup_counter = 0;
-			acknum = ntohl(myheader->acknum);		
+			acknum = myheader->acknum;		
 			
+			//Packets in the window are stored in network order
 			while(window[ack_counter % MAX_WINDOW_SIZE] != NULL) {
 				if(acknum == ntohl(window[ack_counter % MAX_WINDOW_SIZE]->hdr.sequence)) {
 					break;
 				}
 				free(window[ack_counter % MAX_WINDOW_SIZE]);
 				window[ack_counter % MAX_WINDOW_SIZE] = NULL;			
-				
-				send_next_packet(sock, out, ack_counter, 0);
+				if(!out_of_data) {
+					out_of_data = !send_next_packet(sock, out, ack_counter, 0);
+				}
 				ack_counter++;
 			}
 			
-	//		t.tv_sec = rtt_sec;
 			t.tv_usec += millisecond;
 			if(rtt_usec > 10 * millisecond) {
 				rtt_usec -= millisecond;
@@ -291,20 +293,28 @@ int main(int argc, char *argv[]) {
 				done = 1;
 			}
 						
-		} else if(ntohl(myheader->acknum) == acknum) {
+		} else if(myheader->acknum == acknum) {
 			//Increment rtt, and wait for additional time for an extra packet to return
 			rtt_usec += millisecond;
-			t.tv_usec += millisecond;
+			//t.tv_usec += millisecond;
 			mylog("[recv out of order or dup ack] %d\n", acknum);
 			dup_counter++;
 			if(CUR_WINDOW_SIZE > 3) { CUR_WINDOW_SIZE--; }
+			if(dup_counter == 6) {
+				mylog("[resend data] %d\n", acknum);
+				//Send three times just in case, since the last time may have been lost as well
+				send_next_packet(sock, out, ack_counter, 0);
+				send_next_packet(sock, out, ack_counter, 0);
+				send_next_packet(sock, out, ack_counter, 0);
+				continue;
+			}
 			if(dup_counter == 3) {
 				mylog("[resend data] %d\n", acknum);
 				send_next_packet(sock, out, ack_counter, 0);
-				dup_counter = 0;
+				//dup_counter = 0;
 			}
         } else {
-			mylog("[recv old ack] %d %d\n", ntohl(myheader->acknum), acknum);
+			mylog("[recv old ack] %d %d\n", myheader->acknum, acknum);
 			continue;
 		}
       } else {
