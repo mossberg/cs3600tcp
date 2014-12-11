@@ -1,0 +1,79 @@
+# Project 4: Simple Transport Protocol
+
+Schuyler Rosefield && Mark Mossberg, (team correcthorsebatterystaple)
+Northeastern University
+CS 3600: Systems and Networks
+Professor Alan Mislove
+
+## Approach
+
+We pursued a simple approach to the creation of our protocol,
+starting with the minimal necessary window, and then further adding
+complexity to the sender and receiver. Timeouts are used to manipulate
+how often windows are sent, and the sender has a variable-sized window
+to accommodate for network congestion.
+
+## Challenges
+
+One of the major challenges faced was the issue of timing and
+performance. Specifically, the usage of times was both beneficial and
+detrimental to the performance of the protocol. Too short of a timer
+would result in resending the window many times in short succession
+causing congestion. Setting too long of a timer proved detrimental when
+few packets were remaining resulting in idling from both the sender and
+receiver's sides.
+
+One lingering problem throughout the majority of the development process
+was dealing with non-deterministic failures of the test scripts due
+to timeouts and other unexpected side effects of dropped, delayed,
+and otherwise mangled packets. One hard to diagnose problem was due to
+the builtin read() calls not returning a full DATA_SIZE, even though
+additional data was still to be passed to stdin.
+
+## Features
+
+Our transport protocol implements reliable internetwork packet
+transmission via features such as retransmission of dropped and corrupted
+packets and duplicate packet detection. We also include a dynamic send
+and receive window which improves transmission speed considerably as it
+removes much of the idle time involved with waiting for timeouts in a
+stop-and-wait protocol and allows the network bandwidth to be utilized
+more completely. Packet corruption is detected using a version of of
+the Internet checksum.
+
+## Testing
+
+Testing involved using the provided testing script as well as a
+significant amount of manual testing. The testing script allowed us to
+see, at a high level, how our protocol performed (or not), but did not
+give us the intricate log details and timings. Using the ./run script
+and manually running the server/client gave us a more precise way to
+view traffic over the network and how our program dealt with lossy
+transmission.
+
+## Protocol
+
+On the sender side of the protocol, data is read in from stdin and
+processed into discrete packets, each containing a maximum amount of data
+of 1460 bytes. These packets are loaded into a window and then the entire
+window of packets is sent to the receiver one after another, without
+waiting for acknowledgement of receipt from the receiver. As the sender
+receives acknowledgements from the receiver, it responds accordingly,
+sliding the window or resending the window on timeout. Correctness of the
+packet order is done using sequence and ack variables to keep track of
+the next packet to expect. Sliding the window is implemented by freeing
+the packet's memory in the window and incrementing the window index
+variable. When we reach the end of the data or have a small window size,
+we aggressively send duplicate data as the timeout is more significant
+than sending double data. For example, on EOF, the sender sends the
+receiver the FIN packet five times.
+
+On the receiver side of the protocol, the receiver accepts packets,
+loading them into a similar window of packets if they are out of
+order, but otherwise printing them to stdout to simulate delivering the
+packet's contents to the application, also sending the acknowledgement
+to the sender. The window is managed with an increasing index counter,
+modulo the window size to continually put received packets in the correct
+spot in the window. Upon receiving the FIN packet the receiver exits
+without sending an ack, as the sender does not check for acks after
+sending a FIN.
